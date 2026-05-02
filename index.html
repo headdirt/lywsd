@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LYWSD02 Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --accent: #0e7490;
+      --accent-hover: #155e75;
+      --bg: #fff;
+      --bg-soft: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --ok: #15803d;
+      --err: #b91c1c;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --accent: #22d3ee;
+        --accent-hover: #67e8f9;
+        --bg: #0f172a;
+        --bg-soft: #1e293b;
+        --border: #334155;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --ok: #4ade80;
+        --err: #f87171;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font: 14px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif;
+      max-width: 480px;
+      margin: 24px auto;
+      padding: 0 16px 24px;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 2px;
+    }
+    h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      padding: 3px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-soft);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pill::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .pill.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); }
+    .pill.on::before { background: var(--ok); }
+    fieldset {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin: 0 0 10px;
+      padding: 8px 12px 10px;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+    }
+    legend {
+      padding: 0 6px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row + .row { margin-top: 6px; }
+    button, input[type=number], input[type=text] {
+      font: inherit;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    button {
+      padding: 4px 10px;
+      background: var(--bg-soft);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    button.primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    input[type=number], input[type=text] { padding: 3px 6px; }
+    input[type=number]:focus, input[type=text]:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -1px;
+      border-color: transparent;
+    }
+    input[type=number] { width: 56px; }
+    input.wide { width: 60px; }
+    input[type=radio] { accent-color: var(--accent); margin: 0 4px 0 0; }
+    label { display: inline-flex; align-items: center; gap: 4px; }
+    .v { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600; }
+    .sensor-row .v { font-size: 16px; color: var(--accent); }
+    .sensor-row > span { padding: 0 4px; }
+    .muted { color: var(--muted); }
+    .hint { cursor: help; border-bottom: 1px dotted currentColor; }
+    summary { cursor: pointer; color: var(--muted); font-size: 12px; list-style-position: inside; user-select: none; }
+    summary:hover { color: var(--accent); }
+    details[open] summary { margin-bottom: 6px; }
+    #log {
+      font: 11px/1.4 ui-monospace, Menlo, monospace;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      max-height: 100px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      color: var(--muted);
+    }
+    #log .ok { color: var(--ok); }
+    #log .err { color: var(--err); }
+    textarea {
+      font: 11px/1.35 ui-monospace, Menlo, monospace;
+      color: var(--text);
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+    }
+    textarea:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -1px;
+      border-color: transparent;
+    }
+    #historyOut {
+      width: 100%;
+      min-height: 90px;
+      resize: vertical;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LYWSD02</h1>
+    <span id="state" class="pill">Not connected</span>
+  </header>
+  <div class="sub">Set time, units, and read sensor values over Bluetooth.</div>
+
+  <div class="row" style="margin-bottom:10px">
+    <button id="connect" class="primary">Connect</button>
+    <button id="disconnect" disabled>Disconnect</button>
+  </div>
+
+  <fieldset>
+    <legend>Time</legend>
+    <div class="row">
+      <label>TZ <input type="number" id="tz" min="-12" max="14" step="1"></label>
+      <button id="setTime" data-needs-connection disabled>Set to now</button>
+      <button id="readTime" data-needs-connection disabled>Read</button>
+      <span class="v" id="deviceTime">—</span>
+    </div>
+    <div class="row">
+      <label><input type="radio" name="timeFormat" value="0" checked> 24h</label>
+      <label><input type="radio" name="timeFormat" value="170"> 12h</label>
+      <button id="setTimeFormat" data-needs-connection disabled>Apply</button>
+      <button id="readTimeFormat" data-needs-connection disabled>Read</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Units</legend>
+    <div class="row">
+      <label><input type="radio" name="unit" value="0" checked> °C</label>
+      <label><input type="radio" name="unit" value="1"> °F</label>
+      <button id="setUnit" data-needs-connection disabled>Apply</button>
+      <button id="readUnit" data-needs-connection disabled>Read</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Sensor</legend>
+    <div class="row sensor-row">
+      <span><span class="v" id="temp">—</span> °C</span>
+      <span><span class="v" id="hum">—</span> %</span>
+      <span><span class="v" id="bat">—</span> % <span class="muted hint" title="Firmware quirk: this value is often stuck near 100%.">battery</span></span>
+    </div>
+    <div class="row">
+      <button id="readBattery" data-needs-connection disabled>Read battery</button>
+      <button id="watchData" disabled>Stream</button>
+      <button id="stopWatch" disabled>Stop</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Comfort</legend>
+    <div class="row">
+      <label>Temp <input class="wide" type="number" id="comfortTempMin" min="-30" max="60" step="0.1">–<input class="wide" type="number" id="comfortTempMax" min="-30" max="60" step="0.1"> °C</label>
+    </div>
+    <div class="row">
+      <label>RH <input class="wide" type="number" id="comfortHumMin" min="0" max="100" step="1">–<input class="wide" type="number" id="comfortHumMax" min="0" max="100" step="1"> %</label>
+      <button id="setComfort" data-needs-connection disabled>Apply</button>
+      <button id="readComfort" data-needs-connection disabled>Read</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>History</legend>
+    <details>
+      <summary>Show history tools</summary>
+      <div class="row">
+        <label>From <input class="wide" type="number" id="historyStart" min="0" step="1"></label>
+        <label>Count <input type="number" id="historyCount" min="1" max="512" step="1" value="10"></label>
+        <button id="readHistory" data-needs-connection disabled>Read</button>
+        <button id="stopHistory" disabled>Stop</button>
+      </div>
+      <div class="row">
+        <textarea id="historyOut" readonly></textarea>
+      </div>
+    </details>
+  </fieldset>
+
+  <fieldset>
+    <legend>Log</legend>
+    <details>
+      <summary>Show log</summary>
+      <div id="log"></div>
+    </details>
+  </fieldset>
+
+
+<script>
+"use strict";
+
+const SERVICE = "ebe0ccb0-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_TIME = "ebe0ccb7-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_DATA_COUNT = "ebe0ccb9-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_INDEX = "ebe0ccba-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_DATA_NOTIFY = "ebe0ccbc-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_UNIT = "ebe0ccbe-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_BATT = "ebe0ccc4-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_DATA = "ebe0ccc1-7a0a-4b0c-8a1a-6ff2997da3a6";
+const CH_COMFORT = "ebe0ccd7-7a0a-4b0c-8a1a-6ff2997da3a6";
+
+const UNIT = { C: 0x00, F: 0x01 };
+const TIME_FORMAT = { H24: 0x00, H12: 0xaa };
+const MAX_LOG_LINES = 200;
+
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+const ui = {
+  connect: $("connect"), disconnect: $("disconnect"),
+  state: $("state"),
+  watchData: $("watchData"), stopWatch: $("stopWatch"),
+  readHistory: $("readHistory"), stopHistory: $("stopHistory"),
+};
+
+let device = null;
+let service = null;
+const stream = { char: null, handler: null, active: false };
+const history = { char: null, handler: null, active: false, onStop: null };
+
+function log(msg, kind) {
+  const line = document.createElement("div");
+  if (kind) line.className = kind;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logEl.appendChild(line);
+  while (logEl.childElementCount > MAX_LOG_LINES) logEl.firstChild.remove();
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function refreshUI() {
+  const connected = !!device?.gatt?.connected;
+  ui.state.textContent = connected ? (device?.name || "Connected") : "Not connected";
+  ui.state.classList.toggle("on", connected);
+  ui.connect.disabled = connected;
+  ui.disconnect.disabled = !connected;
+  for (const btn of document.querySelectorAll("[data-needs-connection]")) {
+    btn.disabled = !connected;
+  }
+  ui.watchData.disabled = !connected || stream.active;
+  ui.stopWatch.disabled = !stream.active;
+  ui.readHistory.disabled = !connected || history.active;
+  ui.stopHistory.disabled = !history.active;
+}
+
+const fmtTz = (tz) => `UTC${tz >= 0 ? "+" : ""}${tz}`;
+const unitLabel = (code) => code === UNIT.F ? "F" : "C";
+const timeFormatLabel = (code) => code === TIME_FORMAT.H12 ? "12h" : "24h";
+const parseSensor = (v) => ({ temp: v.getInt16(0, true) / 100, hum: v.getUint8(2) });
+const parseHistoryRecord = (v) => ({
+  index: v.getUint32(0, true),
+  stamp: new Date(v.getUint32(4, true) * 1000).toISOString(),
+  tempA: v.getInt16(8, true) / 10,
+  humA: v.getUint8(10),
+  tempB: v.getInt16(11, true) / 10,
+  humB: v.getUint8(13),
+});
+const parseComfort = (v) => {
+  const temps = [v.getInt16(0, true) / 100, v.getInt16(2, true) / 100].sort((a, b) => a - b);
+  const hums = [v.getUint8(4), v.getUint8(5)].sort((a, b) => a - b);
+  return { tempMin: temps[0], tempMax: temps[1], humMin: hums[0], humMax: hums[1] };
+};
+const packComfort = ({ tempMin, tempMax, humMin, humMax }) => {
+  if (!(tempMin >= -30 && tempMin <= tempMax && tempMax <= 60)) throw new Error("Temperature range must be -30..60 °C");
+  if (!(humMin >= 0 && humMin <= humMax && humMax <= 100)) throw new Error("Humidity range must be 0..100%");
+  const buf = new ArrayBuffer(6);
+  const v = new DataView(buf);
+  v.setInt16(0, Math.round(tempMax * 100), true);
+  v.setInt16(2, Math.round(tempMin * 100), true);
+  v.setUint8(4, humMax);
+  v.setUint8(5, humMin);
+  return buf;
+};
+
+async function run(label, fn) {
+  try { await fn(); }
+  catch (err) { log(`${label} failed: ${err.message || err}`, "err"); }
+}
+
+async function getChar(uuid) {
+  if (!service) throw new Error("Not connected");
+  return service.getCharacteristic(uuid);
+}
+const readChar = async (uuid) => (await getChar(uuid)).readValue();
+const writeChar = async (uuid, buf) => (await getChar(uuid)).writeValue(buf);
+
+async function refreshReadouts() {
+  await Promise.allSettled([
+    readTimeState(),
+    readUnitState(),
+    readBatteryState(),
+    readComfortState(),
+    readHistoryCountState(),
+  ]);
+}
+
+ui.connect.onclick = () => run("Connect", async () => {
+  log("Requesting device…");
+  device = await navigator.bluetooth.requestDevice({
+    filters: [{ namePrefix: "LYWSD02" }],
+    optionalServices: [SERVICE],
+  });
+  device.addEventListener("gattserverdisconnected", onDisconnected);
+  log(`Connecting to ${device.name}…`);
+  service = await (await device.gatt.connect()).getPrimaryService(SERVICE);
+  refreshUI();
+  log("Connected.", "ok");
+  await refreshReadouts();
+});
+
+ui.disconnect.onclick = () => {
+  if (device?.gatt?.connected) device.gatt.disconnect();
+};
+
+async function onDisconnected() {
+  log("Disconnected.");
+  await stopNotify(stream, "streaming", true);
+  await stopNotify(history, "history read", true);
+  device = service = null;
+  refreshUI();
+}
+
+async function stopNotify(state, label, silent = false) {
+  if (!state.active) return;
+  const { char, handler, onStop } = state;
+  state.char = null;
+  state.handler = null;
+  state.onStop = null;
+  state.active = false;
+  try { await char.stopNotifications(); } catch { /* device may be gone */ }
+  char.removeEventListener("characteristicvaluechanged", handler);
+  if (onStop) onStop();
+  refreshUI();
+  if (!silent) log(`Stopped ${label}.`);
+}
+
+$("setTime").onclick = () => run("Set time", async () => {
+  const tz = parseInt($("tz").value, 10);
+  if (Number.isNaN(tz) || tz < -12 || tz > 14) throw new Error("Timezone out of range");
+  const now = Math.floor(Date.now() / 1000);
+  const buf = new ArrayBuffer(5);
+  const view = new DataView(buf);
+  view.setUint32(0, now, true);
+  view.setInt8(4, tz);
+  try {
+    const current = await readChar(CH_TIME);
+    if (current.byteLength >= 7) {
+      const full = new Uint8Array(7);
+      full.set(new Uint8Array(buf), 0);
+      full[5] = current.getUint8(5);
+      full[6] = current.getUint8(6);
+      await writeChar(CH_TIME, full);
+    } else {
+      await writeChar(CH_TIME, buf);
+    }
+  } catch {
+    await writeChar(CH_TIME, buf);
+  }
+  log(`Set time to ${new Date(now * 1000).toLocaleString()} (${fmtTz(tz)})`, "ok");
+});
+
+$("readTime").onclick = () => run("Read time", async () => {
+  await readTimeState();
+});
+
+async function readTimeState() {
+  const v = await readChar(CH_TIME);
+  const ts = v.getUint32(0, true);
+  const tz = v.byteLength >= 5 ? v.getInt8(4) : 0;
+  const fmt = v.byteLength >= 7 ? v.getUint8(6) : TIME_FORMAT.H24;
+  setRadio("timeFormat", fmt === TIME_FORMAT.H12 ? TIME_FORMAT.H12 : TIME_FORMAT.H24);
+  $("deviceTime").textContent = `${new Date(ts * 1000).toLocaleString()} (${fmtTz(tz)}, ${timeFormatLabel(fmt)})`;
+  log(`Read time (${timeFormatLabel(fmt)}).`, "ok");
+}
+
+const getRadio = (name) => parseInt(document.querySelector(`input[name="${name}"]:checked`).value, 10);
+const setRadio = (name, code) => {
+  const el = document.querySelector(`input[name="${name}"][value="${code}"]`);
+  if (el) el.checked = true;
+};
+
+$("setTimeFormat").onclick = () => run("Set time format", async () => {
+  const current = await readChar(CH_TIME);
+  if (current.byteLength < 5) throw new Error("Time characteristic is too short");
+  const buf = new ArrayBuffer(7);
+  const out = new DataView(buf);
+  out.setUint32(0, current.getUint32(0, true), true);
+  out.setInt8(4, current.getInt8(4));
+  out.setUint8(5, current.byteLength >= 6 ? current.getUint8(5) : 0);
+  out.setUint8(6, getRadio("timeFormat"));
+  await writeChar(CH_TIME, buf);
+  log(`Set time display to ${timeFormatLabel(getRadio("timeFormat"))}.`, "ok");
+});
+
+$("readTimeFormat").onclick = () => run("Read time format", async () => {
+  const raw = await readChar(CH_TIME);
+  const code = raw.byteLength >= 7 ? raw.getUint8(6) : TIME_FORMAT.H24;
+  setRadio("timeFormat", code === TIME_FORMAT.H12 ? TIME_FORMAT.H12 : TIME_FORMAT.H24);
+  log(`Current time display: ${timeFormatLabel(code)} (raw 0x${code.toString(16).padStart(2, "0")})`, "ok");
+});
+
+$("setUnit").onclick = () => run("Set unit", async () => {
+  const code = getRadio("unit");
+  await writeChar(CH_UNIT, new Uint8Array([code]));
+  log(`Set unit to °${unitLabel(code)}.`, "ok");
+});
+
+$("readUnit").onclick = () => run("Read unit", async () => {
+  await readUnitState();
+});
+
+async function readUnitState() {
+  const raw = (await readChar(CH_UNIT)).getUint8(0);
+  setRadio("unit", raw === UNIT.F ? UNIT.F : UNIT.C);
+  log(`Current unit: °${unitLabel(raw)} (raw 0x${raw.toString(16).padStart(2, "0")})`, "ok");
+}
+
+$("readBattery").onclick = () => run("Read battery", async () => {
+  await readBatteryState();
+});
+
+async function readBatteryState() {
+  const pct = (await readChar(CH_BATT)).getUint8(0);
+  $("bat").textContent = pct;
+  log(`Battery ${pct}% (unreliable).`, "ok");
+}
+
+function fillComfort(c) {
+  $("comfortTempMin").value = c.tempMin.toFixed(1);
+  $("comfortTempMax").value = c.tempMax.toFixed(1);
+  $("comfortHumMin").value = c.humMin;
+  $("comfortHumMax").value = c.humMax;
+}
+
+$("readComfort").onclick = () => run("Read comfort", async () => {
+  await readComfortState();
+});
+
+async function readComfortState() {
+  const c = parseComfort(await readChar(CH_COMFORT));
+  fillComfort(c);
+  log(`Comfort ${c.tempMin.toFixed(1)}–${c.tempMax.toFixed(1)} °C, ${c.humMin}–${c.humMax}% RH.`, "ok");
+}
+
+async function readHistoryCountState() {
+  const v = await readChar(CH_DATA_COUNT);
+  const start = v.getUint32(4, true);
+  $("historyStart").value = start;
+  log(`History indices: read ${v.getUint32(0, true)}, start ${start}.`, "ok");
+}
+
+$("setComfort").onclick = () => run("Set comfort", async () => {
+  const c = {
+    tempMin: parseFloat($("comfortTempMin").value),
+    tempMax: parseFloat($("comfortTempMax").value),
+    humMin: parseInt($("comfortHumMin").value, 10),
+    humMax: parseInt($("comfortHumMax").value, 10),
+  };
+  if (Object.values(c).some(Number.isNaN)) throw new Error("Comfort values are incomplete");
+  await writeChar(CH_COMFORT, packComfort(c));
+  fillComfort(parseComfort(await readChar(CH_COMFORT)));
+  log("Updated comfort range.", "ok");
+});
+
+ui.watchData.onclick = () => run("Stream sensor", async () => {
+  if (stream.active) return;
+  stream.char = await getChar(CH_DATA);
+  stream.handler = (e) => {
+    const { temp, hum } = parseSensor(e.target.value);
+    $("temp").textContent = temp.toFixed(2);
+    $("hum").textContent = hum;
+  };
+  stream.char.addEventListener("characteristicvaluechanged", stream.handler);
+  await stream.char.startNotifications();
+  stream.active = true;
+  refreshUI();
+  log("Streaming sensor data…", "ok");
+});
+
+ui.stopWatch.onclick = () => run("Stop", () => stopNotify(stream, "streaming"));
+
+ui.readHistory.onclick = () => run("Read history", async () => {
+  if (history.active) return;
+  const start = parseInt($("historyStart").value, 10);
+  const wanted = parseInt($("historyCount").value, 10);
+  if (Number.isNaN(start) || start < 0) throw new Error("Start index is invalid");
+  if (Number.isNaN(wanted) || wanted < 1 || wanted > 512) throw new Error("Count must be 1..512");
+
+  const lines = ["index,time_utc,temp_a_c,hum_a,temp_b_c,hum_b"];
+  $("historyOut").value = lines[0];
+  let accepted = 0;
+  history.char = await getChar(CH_DATA_NOTIFY);
+  history.handler = (e) => {
+    const v = e.target.value;
+    if (v.byteLength < 14) {
+      log(`Short history notification (${v.byteLength} bytes).`, "err");
+      return;
+    }
+    const r = parseHistoryRecord(v);
+    if (r.index < start) {
+      log(`Skipped stale history index ${r.index}.`);
+      return;
+    }
+    lines.push(`${r.index},${r.stamp},${r.tempA.toFixed(2)},${r.humA},${r.tempB.toFixed(2)},${r.humB}`);
+    accepted += 1;
+    if (accepted >= wanted) stopNotify(history, "history read");
+  };
+  history.onStop = () => { $("historyOut").value = lines.join("\n"); };
+  history.char.addEventListener("characteristicvaluechanged", history.handler);
+  await history.char.startNotifications();
+  history.active = true;
+  refreshUI();
+
+  const buf = new ArrayBuffer(4);
+  new DataView(buf).setUint32(0, start, true);
+  await writeChar(CH_INDEX, buf);
+  log(`Reading ${wanted} history records from ${start}.`, "ok");
+});
+
+ui.stopHistory.onclick = () => run("Stop history", () => stopNotify(history, "history read"));
+
+$("tz").value = -new Date().getTimezoneOffset() / 60;
+refreshUI();
+if (!navigator.bluetooth) {
+  log("Web Bluetooth API not available. Use Chrome on Linux, macOS, or Windows.", "err");
+  ui.connect.disabled = true;
+}
+</script>
+</body>
+</html>
