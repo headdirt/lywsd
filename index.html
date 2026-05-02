@@ -295,6 +295,10 @@ function log(msg, kind) {
   logEl.appendChild(line);
   while (logEl.childElementCount > MAX_LOG_LINES) logEl.firstChild.remove();
   logEl.scrollTop = logEl.scrollHeight;
+  if (kind === "err") {
+    const details = logEl.closest("details");
+    if (details) details.open = true;
+  }
 }
 
 function refreshUI() {
