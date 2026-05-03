@@ -333,6 +333,15 @@ const parseComfort = (v) => {
   const hums = [v.getUint8(4), v.getUint8(5)].sort((a, b) => a - b);
   return { tempMin: temps[0], tempMax: temps[1], humMin: hums[0], humMax: hums[1] };
 };
+const packTimePayload = (ts, tz, reserved, fmt) => {
+  const buf = new ArrayBuffer(7);
+  const v = new DataView(buf);
+  v.setUint32(0, ts, true);
+  v.setInt8(4, tz);
+  v.setUint8(5, reserved);
+  v.setUint8(6, fmt);
+  return buf;
+};
 const packComfort = ({ tempMin, tempMax, humMin, humMax }) => {
   if (!(tempMin >= -30 && tempMin <= tempMax && tempMax <= 60)) throw new Error("Temperature range must be -30..60 °C");
   if (!(humMin >= 0 && humMin <= humMax && humMax <= 100)) throw new Error("Humidity range must be 0..100%");
@@ -411,24 +420,14 @@ $("setTime").onclick = () => run("Set time", async () => {
   const tz = parseInt($("tz").value, 10);
   if (Number.isNaN(tz) || tz < -12 || tz > 14) throw new Error("Timezone out of range");
   const now = Math.floor(Date.now() / 1000);
-  const buf = new ArrayBuffer(5);
-  const view = new DataView(buf);
-  view.setUint32(0, now, true);
-  view.setInt8(4, tz);
+  let reserved = 0;
+  let fmt = TIME_FORMAT.H24;
   try {
     const current = await readChar(CH_TIME);
-    if (current.byteLength >= 7) {
-      const full = new Uint8Array(7);
-      full.set(new Uint8Array(buf), 0);
-      full[5] = current.getUint8(5);
-      full[6] = current.getUint8(6);
-      await writeChar(CH_TIME, full);
-    } else {
-      await writeChar(CH_TIME, buf);
-    }
-  } catch {
-    await writeChar(CH_TIME, buf);
-  }
+    if (current.byteLength >= 6) reserved = current.getUint8(5);
+    if (current.byteLength >= 7) fmt = current.getUint8(6);
+  } catch { /* fall through with defaults */ }
+  await writeChar(CH_TIME, packTimePayload(now, tz, reserved, fmt));
   log(`Set time to ${new Date(now * 1000).toLocaleString()} (${fmtTz(tz)})`, "ok");
 });
 
@@ -455,14 +454,12 @@ const setRadio = (name, code) => {
 $("setTimeFormat").onclick = () => run("Set time format", async () => {
   const current = await readChar(CH_TIME);
   if (current.byteLength < 5) throw new Error("Time characteristic is too short");
-  const buf = new ArrayBuffer(7);
-  const out = new DataView(buf);
-  out.setUint32(0, current.getUint32(0, true), true);
-  out.setInt8(4, current.getInt8(4));
-  out.setUint8(5, current.byteLength >= 6 ? current.getUint8(5) : 0);
-  out.setUint8(6, getRadio("timeFormat"));
-  await writeChar(CH_TIME, buf);
-  log(`Set time display to ${timeFormatLabel(getRadio("timeFormat"))}.`, "ok");
+  const ts = current.getUint32(0, true);
+  const tz = current.getInt8(4);
+  const reserved = current.byteLength >= 6 ? current.getUint8(5) : 0;
+  const fmt = getRadio("timeFormat");
+  await writeChar(CH_TIME, packTimePayload(ts, tz, reserved, fmt));
+  log(`Set time display to ${timeFormatLabel(fmt)}.`, "ok");
 });
 
 $("readTimeFormat").onclick = () => run("Read time format", async () => {
@@ -564,6 +561,7 @@ ui.readHistory.onclick = () => run("Read history", async () => {
   let accepted = 0;
   history.char = await getChar(CH_DATA_NOTIFY);
   history.handler = (e) => {
+    if (!history.active) return;
     const v = e.target.value;
     if (v.byteLength < 14) {
       log(`Short history notification (${v.byteLength} bytes).`, "err");
