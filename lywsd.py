@@ -616,12 +616,15 @@ async def cmd_info(args):
 
         device_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
         host_dt = datetime.now(tz=timezone.utc)
-        drift = (device_dt - host_dt).total_seconds()
+        rtt, _ = await estimate_read_rtt(client)
+        drift = await measure_drift(client, rtt)
+        if drift is None:
+            drift = (device_dt - host_dt).total_seconds()
 
         print(f"Address     : {device.address}")
         print(f"Device time : {device_dt.astimezone().isoformat(timespec='seconds')}")
         print(f"Host time   : {host_dt.astimezone().isoformat(timespec='seconds')}")
-        print(f"Drift       : {drift:+.0f}s (device - host)")
+        print(f"Drift       : {drift:+.2f}s (device - host)")
         print(f"Timezone    : UTC{tz:+d}")
         print(f"Units       : °{unit}")
         print(f"Battery     : {battery}% (firmware quirk; usually stuck near 100%)")
@@ -649,23 +652,66 @@ async def read_one_sensor(client: BleakClient, timeout: float = 5.0):
             return None
 
 
+async def estimate_read_rtt(client: BleakClient, samples: int = 3) -> tuple[float, bytes]:
+    """Best-of-N round-trip time for a CH_TIME read, plus the last value read."""
+    best = float("inf")
+    raw = b""
+    for _ in range(samples):
+        t0 = time.monotonic()
+        raw = bytes(await client.read_gatt_char(CH_TIME))
+        best = min(best, time.monotonic() - t0)
+    return best, raw
+
+
+async def measure_drift(client: BleakClient, rtt: float, timeout: float = 2.5) -> float | None:
+    """Device clock minus host clock, in seconds, to roughly half a BLE round trip.
+
+    The time characteristic only has whole-second resolution, so poll it until the
+    device's second ticks over; that tick marks the device's whole-second boundary.
+    """
+    prev = None
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        sent = time.time()
+        ts = TIME_STRUCT.unpack_from(bytes(await client.read_gatt_char(CH_TIME)))[0]
+        # The device answered somewhere mid-round-trip; assume halfway.
+        host_at_read = sent + rtt / 2
+        if prev is not None and ts != prev[0]:
+            # The tick fell between the two reads; take the midpoint.
+            return ts - (prev[1] + host_at_read) / 2
+        prev = (ts, host_at_read)
+    return None
+
+
 async def cmd_set_time(args):
     tz = args.tz if args.tz is not None else local_tz_offset_hours()
     if not -12 <= tz <= 14:
         sys.exit(f"Timezone {tz} out of range [-12, 14]")
 
     device = await resolve_device(args)
-    now = int(time.time())
 
     async with BleakClient(device) as client:
         reserved = 0
         fmt = TIME_FORMAT_24
+        rtt, current = await estimate_read_rtt(client)
         with contextlib.suppress(Exception):
-            current = bytes(await client.read_gatt_char(CH_TIME))
             _, _, reserved, fmt = parse_time_payload(current)
-        await client.write_gatt_char(CH_TIME, pack_time_payload(now, tz, reserved, fmt), response=True)
-    when = datetime.fromtimestamp(now).isoformat(timespec="seconds")
-    print(f"Set time to {when} (UTC{tz:+d})")
+
+        # The device only takes whole seconds, so time the write to land right on a
+        # second boundary rather than up to a second late (plus connection latency).
+        lead = rtt / 2
+        target = int(time.time()) + 1
+        if target - lead - time.time() < 0.05:
+            target += 1
+        await asyncio.sleep(max(0.0, target - lead - time.time()))
+        await client.write_gatt_char(CH_TIME, pack_time_payload(target, tz, reserved, fmt), response=True)
+
+        drift = await measure_drift(client, rtt)
+
+    when = datetime.fromtimestamp(target).isoformat(timespec="seconds")
+    print(f"Set time to {when} (UTC{tz:+d}), BLE round trip ~{rtt * 1000:.0f} ms")
+    if drift is not None:
+        print(f"Verified drift: {drift:+.2f}s (device - host)")
 
 
 async def cmd_set_time_format(args):

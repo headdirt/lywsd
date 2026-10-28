@@ -416,19 +416,52 @@ async function stopNotify(state, label, silent = false) {
   if (!silent) log(`Stopped ${label}.`);
 }
 
+// Best-of-N round trip for a time read, plus the last value read.
+async function estimateReadRtt(samples = 3) {
+  let best = Infinity;
+  let raw;
+  for (let i = 0; i < samples; i++) {
+    const t0 = performance.now();
+    raw = await readChar(CH_TIME);
+    best = Math.min(best, (performance.now() - t0) / 1000);
+  }
+  return { rtt: best, raw };
+}
+
+// Device clock minus host clock in seconds. The characteristic only has whole-second
+// resolution, so poll until the device's second ticks over and time that tick.
+async function measureDrift(rtt, timeout = 2.5) {
+  let prev = null;
+  const deadline = performance.now() + timeout * 1000;
+  while (performance.now() < deadline) {
+    const sent = Date.now() / 1000;
+    const ts = (await readChar(CH_TIME)).getUint32(0, true);
+    const hostAtRead = sent + rtt / 2;
+    if (prev && ts !== prev.ts) return ts - (prev.hostAtRead + hostAtRead) / 2;
+    prev = { ts, hostAtRead };
+  }
+  return null;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 $("setTime").onclick = () => run("Set time", async () => {
   const tz = parseInt($("tz").value, 10);
   if (Number.isNaN(tz) || tz < -12 || tz > 14) throw new Error("Timezone out of range");
-  const now = Math.floor(Date.now() / 1000);
   let reserved = 0;
   let fmt = TIME_FORMAT.H24;
-  try {
-    const current = await readChar(CH_TIME);
-    if (current.byteLength >= 6) reserved = current.getUint8(5);
-    if (current.byteLength >= 7) fmt = current.getUint8(6);
-  } catch { /* fall through with defaults */ }
-  await writeChar(CH_TIME, packTimePayload(now, tz, reserved, fmt));
-  log(`Set time to ${new Date(now * 1000).toLocaleString()} (${fmtTz(tz)})`, "ok");
+  const { rtt, raw: current } = await estimateReadRtt();
+  if (current.byteLength >= 6) reserved = current.getUint8(5);
+  if (current.byteLength >= 7) fmt = current.getUint8(6);
+  // The device only takes whole seconds, so time the write to land on a second boundary.
+  const lead = rtt / 2;
+  let target = Math.floor(Date.now() / 1000) + 1;
+  if (target - lead - Date.now() / 1000 < 0.05) target += 1;
+  await sleep(Math.max(0, (target - lead) * 1000 - Date.now()));
+  await writeChar(CH_TIME, packTimePayload(target, tz, reserved, fmt));
+  log(`Set time to ${new Date(target * 1000).toLocaleString()} (${fmtTz(tz)}), BLE round trip ~${Math.round(rtt * 1000)} ms`, "ok");
+  const drift = await measureDrift(rtt);
+  if (drift !== null) log(`Verified drift: ${drift >= 0 ? "+" : ""}${drift.toFixed(2)}s (device - host)`, "ok");
 });
 
 $("readTime").onclick = () => run("Read time", async () => {

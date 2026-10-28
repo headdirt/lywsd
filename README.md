@@ -41,6 +41,8 @@ uv run lywsd.py set-unit C
 uv run lywsd.py set-unit F
 ```
 
+`set-time` measures the Bluetooth round trip and times the write to land on a whole-second boundary (the device only stores whole seconds), then reads the clock back and reports the remaining drift. `info` reports drift to a fraction of a second the same way. The device's own clock drifts over time, so re-run `set-time` now and then; it uses the host clock, so keep that synced (NTP).
+
 Read or update comfort thresholds:
 
 ```sh
